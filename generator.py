@@ -8,7 +8,8 @@ def build_generator(latent_dim=100, image_size=64, channels=3):
     model = tf.keras.Sequential()
     # project and reshape
     n_nodes = 4 * 4 * 512
-    model.add(layers.Dense(n_nodes, input_dim=latent_dim, kernel_initializer=init))
+    model.add(layers.Input(shape=(latent_dim,)))
+    model.add(layers.Dense(n_nodes, kernel_initializer=init))
     model.add(layers.ReLU())
     model.add(layers.Reshape((4, 4, 512)))
 

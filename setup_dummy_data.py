@@ -26,6 +26,8 @@ def create_dummy_data(count=100, output_dir='data/celeba_preprocessed', size=64)
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--count', type=int, default=100, help='Number of images to generate')
+    parser.add_argument('--output_dir', type=str, default='data/celeba_preprocessed', help='Output directory for dummy images')
+    parser.add_argument('--size', type=int, default=64, help='Image size (creates size x size images)')
     args = parser.parse_args()
     
-    create_dummy_data(count=args.count)
+    create_dummy_data(count=args.count, output_dir=args.output_dir, size=args.size)

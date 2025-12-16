@@ -97,6 +97,31 @@ Place your training images (JPG/PNG) in `data\raw\train\`. The data loader will 
 python train.py
 ```
 
+## Evaluation
+
+### Quick evaluation (default)
+
+- Ensure `eval_mode: quick` in `config.yaml` (defaults to quick)
+- Run:
+
+```bash
+python evaluation.py
+```
+
+Outputs are saved under `figures/` (metrics JSON, grids, latent interpolation, t-SNE, and loss curves if `training_history.csv` exists).
+
+### Full evaluation (Kaggle T4 x2)
+
+Full eval uses **2000 real / 2000 fake** images for metrics.
+
+1) Set `eval_mode: full` in `config.yaml` (and optionally raise `inception_batch` if memory allows).
+
+2) Run:
+
+```bash
+python evaluation.py
+```
+
 Training will:
 - Load images from `dataset_path` in config.yaml
 - Train for the specified number of epochs (default: 150)

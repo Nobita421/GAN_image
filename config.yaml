@@ -13,3 +13,14 @@ dataset_path: data/raw/train  # used when dataset_source=folder
 export_dir: data/raw  # used by scripts/export_cifar10_tfds.py
 save_dir: ./checkpoints
 samples_dir: ./samples
+
+# Evaluation presets
+eval_mode: quick  # quick | full
+eval_num_real_quick: 200
+eval_num_fake_quick: 200
+eval_num_real_full: 2000
+eval_num_fake_full: 2000
+grid_n_quick: 16
+grid_n_full: 64
+inception_batch: 64
+use_multi_gpu: true

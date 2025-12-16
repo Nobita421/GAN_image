@@ -9,6 +9,17 @@ from data_loader import prepare_dataset, load_config
 from utils.visualizer import save_image_grid
 
 
+def _append_training_history(csv_path, epoch, d_loss, g_loss):
+    import csv
+    header = ['epoch', 'd_loss', 'g_loss']
+    write_header = not os.path.exists(csv_path)
+    with open(csv_path, 'a', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        if write_header:
+            writer.writerow(header)
+        writer.writerow([int(epoch), float(d_loss), float(g_loss)])
+
+
 def train():
     cfg = load_config()
     ds = prepare_dataset(cfg['dataset_path'], 'config.yaml')
@@ -26,6 +37,8 @@ def train():
 
     step = 0
     for epoch in range(1, epochs + 1):
+        d_losses = []
+        g_losses = []
         prog = tqdm(ds, desc=f'Epoch {epoch}/{epochs}', unit='batch')
         for real_imgs in prog:
             bs = real_imgs.shape[0]
@@ -42,6 +55,13 @@ def train():
             z2 = np.random.normal(0, 1, (bs, latent_dim))
             g_loss = gan.combined.train_on_batch(z2, np.ones((bs,1)))
 
+            # track losses (for evaluation plots)
+            try:
+                d_losses.append(float(d_loss[0]))
+            except Exception:
+                d_losses.append(float(d_loss))
+            g_losses.append(float(g_loss))
+
             if step % 50 == 0:
                 prog.set_postfix({'d_loss': float(d_loss[0]), 'g_loss': float(g_loss)})
             step += 1
@@ -55,6 +75,12 @@ def train():
             gen = (gen + 1.0) * 127.5
             save_image_grid(gen.astype('uint8'), f"{cfg['samples_dir']}/epoch_{epoch:03d}.png", rows=4)
             gan.save(save_dir)
+
+            # write per-epoch average losses
+            if d_losses and g_losses:
+                d_mean = float(np.mean(d_losses))
+                g_mean = float(np.mean(g_losses))
+                _append_training_history(os.path.join(save_dir, 'training_history.csv'), epoch, d_mean, g_mean)
 
     # final save
     gan.save(save_dir)

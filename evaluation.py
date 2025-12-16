@@ -1,7 +1,13 @@
 import json
 import os
+import warnings
 from dataclasses import dataclass
 from typing import Optional
+
+# Reduce noisy TF / CUDA / absl logs in notebooks (Kaggle/Colab)
+os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')
+warnings.filterwarnings('ignore', category=UserWarning)
+warnings.filterwarnings('ignore', category=FutureWarning)
 
 import numpy as np
 import tensorflow as tf
@@ -10,6 +16,19 @@ from data_loader import prepare_dataset, load_config
 from vanilla_gan import VanillaGAN
 from utils.visualizer import save_image_grid
 from utils.metrics import fid_score
+
+
+def _quiet_tensorflow_logs() -> None:
+    try:
+        # TF python logger
+        tf.get_logger().setLevel('ERROR')
+        # absl logger (used by TF)
+        from absl import logging as absl_logging
+
+        absl_logging.set_verbosity(absl_logging.ERROR)
+        absl_logging.set_stderrthreshold('error')
+    except Exception:
+        pass
 
 
 def _ensure_dir(path: str) -> None:
@@ -52,15 +71,10 @@ def _load_generator(cfg: dict) -> tf.keras.Model:
 
 
 def _sample_fake_images(generator: tf.keras.Model, n: int, latent_dim: int, batch: int = 128) -> np.ndarray:
-    out = []
-    remaining = n
-    while remaining > 0:
-        bs = min(batch, remaining)
-        z = np.random.normal(size=(bs, latent_dim)).astype(np.float32)
-        imgs = generator.predict(z, verbose=0)
-        out.append(imgs)
-        remaining -= bs
-    return np.concatenate(out, axis=0)
+    # Single predict call avoids tf.function retracing from varying batch sizes
+    z = np.random.normal(size=(n, latent_dim)).astype(np.float32)
+    imgs = generator.predict(z, batch_size=batch, verbose=0)
+    return imgs
 
 
 def _get_strategy(cfg: dict):
@@ -231,6 +245,7 @@ def _get_eval_settings(cfg: dict) -> EvalSettings:
 
 
 def evaluate() -> None:
+    _quiet_tensorflow_logs()
     cfg = load_config()
     settings = _get_eval_settings(cfg)
     figures_dir = cfg.get('figures_dir', 'figures')
@@ -311,9 +326,14 @@ def evaluate() -> None:
         else:
             f.write("- Loss curves: (not available; run training that writes training_history.csv)\\n")
 
-    print("Saved evaluation artifacts to:", figures_dir)
-    print("Metrics:", metrics_path)
-    print("Report:", report_path)
+    print("\n=== Evaluation complete ===")
+    print(f"Mode: {settings.mode} | real={settings.num_real} fake={settings.num_fake} | inception_batch={settings.inception_batch}")
+    print(f"FID (proxy): {fid:.4f}")
+    print(f"Realism proxy (NN mean dist): {realism_proxy:.4f}")
+    print(f"Diversity proxy (mean pairwise dist): {diversity_proxy:.4f}")
+    print(f"Saved to: {figures_dir}")
+    print(f"- metrics: {metrics_path}")
+    print(f"- report:  {report_path}")
 
 
 if __name__ == '__main__':

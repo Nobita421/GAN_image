@@ -45,15 +45,51 @@ pip install -r requirements.txt
 python smoke_test.py
 ```
 
+## Colab / Notebook Steps
+
+```bash
+git pull
+pip install -r requirements.txt
+
+# Optional: export CIFAR-10 into folders (quick runs supported)
+python scripts/export_cifar10_tfds.py --output_dir data/raw --max_images 500
+
+python train.py
+python evaluation.py
+
+# Optional (local or remote): Streamlit UI
+streamlit run app.py
+```
+
+## Smoke Test (Quick)
+
+1) (Optional) export a small CIFAR-10 subset to keep the run fast:
+
+```bash
+python scripts/export_cifar10_tfds.py --output_dir data/raw --max_images 64
+```
+
+2) Edit `config.yaml` for a fast run:
+
+- set `epochs: 1`
+- set `batch_size: 16` (or smaller)
+- keep `dataset_source: folder` and `dataset_path: data/raw/train`
+
+3) Run training (this will generate 16 samples at epoch 1 into `samples_dir`):
+
+```bash
+python train.py
+```
+
 ### 3. Prepare Dataset
 
 Create a data directory and add your images:
 
 ```bash
-mkdir data\celeba_preprocessed
+mkdir data\raw\train
 ```
 
-Place your training images (JPG/PNG) in `data\celeba_preprocessed\`. The data loader will automatically find and preprocess all images.
+Place your training images (JPG/PNG) in `data\raw\train\`. The data loader will automatically find and preprocess all images.
 
 ### 4. Train the GAN
 
@@ -92,7 +128,9 @@ learning_rate: 0.0002   # Adam learning rate
 beta1: 0.5             # Adam beta1 parameter
 epochs: 150            # Number of training epochs
 sample_interval: 5     # Save samples every N epochs
-dataset_path: ./data/celeba_preprocessed
+dataset_source: folder  # folder | tfds_cifar10
+dataset_path: data/raw/train
+export_dir: data/raw
 save_dir: ./checkpoints
 samples_dir: ./samples
 ```

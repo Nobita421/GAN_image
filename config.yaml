@@ -8,6 +8,8 @@ learning_rate: 0.0002
 beta1: 0.5
 epochs: 150
 sample_interval: 5
-dataset_path: ./data/celeba_preprocessed
+dataset_source: folder  # folder | tfds_cifar10
+dataset_path: data/raw/train  # used when dataset_source=folder
+export_dir: data/raw  # used by scripts/export_cifar10_tfds.py
 save_dir: ./checkpoints
 samples_dir: ./samples

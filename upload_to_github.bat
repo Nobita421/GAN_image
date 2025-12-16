@@ -17,11 +17,11 @@ if %errorlevel% neq 0 echo (Nothing to commit or already committed)
 echo.
 echo [4/5] Setting up remote 'origin'...
 git branch -M main
-git remote add origin https://github.com/oneocu/GAN_image.git
+git remote add origin https://github.com/Nobita421/GAN_image.git
 :: If remote exists, update it
 if %errorlevel% neq 0 (
     echo Remote 'origin' already exists. Updating URL...
-    git remote set-url origin https://github.com/oneocu/GAN_image.git
+    git remote set-url origin https://github.com/Nobita421/GAN_image.git
 )
 
 echo.
@@ -31,7 +31,7 @@ git push -u origin main
 if %errorlevel% neq 0 goto :error
 
 echo.
-echo ✅ Successfully uploaded to https://github.com/oneocu/GAN_image.git
+echo ✅ Successfully uploaded to https://github.com/Nobita421/GAN_image.git
 pause
 exit /b 0
 

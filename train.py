@@ -1,4 +1,5 @@
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Suppress TF info/warnings
 import numpy as np
 import tensorflow as tf
 from tqdm import tqdm

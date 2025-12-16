@@ -1,0 +1,13 @@
+image_size: 64
+channels: 3
+latent_dim: 100
+batch_size: 64
+train_split: 0.95
+normalization: tanh
+learning_rate: 0.0002
+beta1: 0.5
+epochs: 150
+sample_interval: 5
+dataset_path: ./data/celeba_preprocessed
+save_dir: ./checkpoints
+samples_dir: ./samples

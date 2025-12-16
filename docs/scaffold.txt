@@ -1,0 +1,569 @@
+Synthetic Image Generator — Vanilla GAN (Keras)
+This canvas contains a complete project scaffold and working Keras code for the “Synthetic Image Generator for Privacy-Preserving Data Augmentation using Vanilla GAN”. Files are split per-module as requested. The code targets 64×64 images by default and uses tf.keras.
+________________________________________
+Project structure
+project/
+├── config.yaml
+├── requirements.txt
+├── data_loader.py
+├── generator.py
+├── discriminator.py
+├── vanilla_gan.py
+├── train.py
+├── evaluation.py
+├── inference.py
+├── app.py             # Streamlit UI
+├── Dockerfile
+└── utils/
+    ├── visualizer.py
+    ├── metrics.py
+    └── logger.py
+________________________________________
+config.yaml
+(See below for the new Python-based config file: config.py, which loads and exposes the configuration programmatically.)
+config.py
+import yaml
+
+DEFAULT_CONFIG = {
+    "image_size": 64,
+    "channels": 3,
+    "latent_dim": 100,
+    "batch_size": 64,
+    "train_split": 0.95,
+    "normalization": "tanh",
+    "learning_rate": 0.0002,
+    "beta1": 0.5,
+    "epochs": 150,
+    "sample_interval": 5,
+    "dataset_path": "./data/celeba_preprocessed",
+    "save_dir": "./checkpoints",
+    "samples_dir": "./samples"
+}
+
+
+def save_config(path="config.yaml", config=None):
+    """Save the Python dict as a YAML file."""
+    if config is None:
+        config = DEFAULT_CONFIG
+    with open(path, "w") as f:
+        yaml.dump(config, f)
+    print(f"Config saved to {path}")
+
+
+def load_config(path="config.yaml"):
+    """Load configuration from YAML. If missing, auto-create one."""
+    try:
+        with open(path, "r") as f:
+            return yaml.safe_load(f)
+    except FileNotFoundError:
+        print("config.yaml not found — creating one with DEFAULT_CONFIG")
+        save_config(path, DEFAULT_CONFIG)
+        return DEFAULT_CONFIG
+
+
+if __name__ == "__main__":
+    # Generates config.yaml if missing
+    cfg = load_config()
+    print("Loaded configuration:")
+    print(cfg)
+image_size: 64
+channels: 3
+latent_dim: 100
+batch_size: 64
+train_split: 0.95
+normalization: tanh
+learning_rate: 0.0002
+beta1: 0.5
+epochs: 150
+sample_interval: 5
+dataset_path: ./data/celeba_preprocessed
+save_dir: ./checkpoints
+samples_dir: ./samples
+________________________________________
+requirements.txt
+tensorflow>=2.10
+numpy
+matplotlib
+pillow
+streamlit
+scikit-learn
+opencv-python
+tqdm
+pyyaml
+________________________________________
+data_loader.py
+import os
+import yaml
+import numpy as np
+from PIL import Image
+import tensorflow as tf
+
+def load_config(path='config.yaml'):
+    with open(path, 'r') as f:
+        return yaml.safe_load(f)
+
+
+def preprocess_image(img_path, image_size=64, channels=3):
+    img = Image.open(img_path)
+    if channels == 1:
+        img = img.convert('L')
+    else:
+        img = img.convert('RGB')
+    img = img.resize((image_size, image_size), Image.BILINEAR)
+    arr = np.array(img).astype('float32')
+    # scale to [-1, 1]
+    arr = (arr / 127.5) - 1.0
+    if channels == 1:
+        arr = np.expand_dims(arr, -1)
+    return arr
+
+
+def prepare_dataset(dataset_path, config_path='config.yaml'):
+    cfg = load_config(config_path)
+    size = cfg['image_size']
+    channels = cfg['channels']
+    bs = cfg['batch_size']
+
+    files = []
+    for root, _, filenames in os.walk(dataset_path):
+        for fn in filenames:
+            if fn.lower().endswith(('.jpg', '.jpeg', '.png')):
+                files.append(os.path.join(root, fn))
+    files = sorted(files)
+
+    def gen():
+        for p in files:
+            try:
+                yield preprocess_image(p, image_size=size, channels=channels)
+            except Exception as e:
+                print('skip', p, e)
+
+    ds = tf.data.Dataset.from_generator(
+        gen,
+        output_signature=tf.TensorSpec(shape=(size, size, channels), dtype=tf.float32)
+    )
+    ds = ds.shuffle(buffer_size=1000).batch(bs).prefetch(tf.data.AUTOTUNE)
+    return ds
+
+
+if __name__ == '__main__':
+    cfg = load_config()
+    ds = prepare_dataset(cfg['dataset_path'])
+    for batch in ds.take(1):
+        print('Batch shape:', batch.shape)
+________________________________________
+generator.py
+import tensorflow as tf
+from tensorflow.keras import layers
+
+
+def build_generator(latent_dim=100, image_size=64, channels=3):
+    """Simple upsampling generator for 64x64 images."""
+    init = tf.keras.initializers.RandomNormal(stddev=0.02)
+    model = tf.keras.Sequential()
+    # project and reshape
+    n_nodes = 4 * 4 * 512
+    model.add(layers.Dense(n_nodes, input_dim=latent_dim, kernel_initializer=init))
+    model.add(layers.ReLU())
+    model.add(layers.Reshape((4, 4, 512)))
+
+    # upsample to 8x8
+    model.add(layers.Conv2DTranspose(256, kernel_size=4, strides=2, padding='same', kernel_initializer=init))
+    model.add(layers.ReLU())
+
+    # 16x16
+    model.add(layers.Conv2DTranspose(128, kernel_size=4, strides=2, padding='same', kernel_initializer=init))
+    model.add(layers.ReLU())
+
+    # 32x32
+    model.add(layers.Conv2DTranspose(64, kernel_size=4, strides=2, padding='same', kernel_initializer=init))
+    model.add(layers.ReLU())
+
+    # 64x64
+    model.add(layers.Conv2DTranspose(channels, kernel_size=4, strides=2, padding='same', kernel_initializer=init))
+    model.add(layers.Activation('tanh'))
+
+    return model
+
+
+if __name__ == '__main__':
+    g = build_generator()
+    g.summary()
+________________________________________
+discriminator.py
+import tensorflow as tf
+from tensorflow.keras import layers
+
+
+def build_discriminator(image_size=64, channels=3):
+    init = tf.keras.initializers.RandomNormal(stddev=0.02)
+    inp = layers.Input((image_size, image_size, channels))
+
+    x = layers.Conv2D(64, 4, strides=2, padding='same', kernel_initializer=init)(inp)
+    x = layers.LeakyReLU(0.2)(x)
+
+    x = layers.Conv2D(128, 4, strides=2, padding='same', kernel_initializer=init)(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.LeakyReLU(0.2)(x)
+
+    x = layers.Conv2D(256, 4, strides=2, padding='same', kernel_initializer=init)(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.LeakyReLU(0.2)(x)
+
+    x = layers.Conv2D(512, 4, strides=2, padding='same', kernel_initializer=init)(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.LeakyReLU(0.2)(x)
+
+    x = layers.Flatten()(x)
+    x = layers.Dense(1, activation='sigmoid')(x)
+
+    model = tf.keras.Model(inputs=inp, outputs=x)
+    return model
+
+
+if __name__ == '__main__':
+    d = build_discriminator()
+    d.summary()
+________________________________________
+vanilla_gan.py
+import tensorflow as tf
+import yaml
+from generator import build_generator
+from discriminator import build_discriminator
+
+
+def load_config(path='config.yaml'):
+    with open(path, 'r') as f:
+        return yaml.safe_load(f)
+
+
+class VanillaGAN:
+    def __init__(self, cfg=None):
+        if cfg is None:
+            cfg = load_config()
+        self.cfg = cfg
+        self.latent_dim = cfg['latent_dim']
+        self.image_size = cfg['image_size']
+        self.channels = cfg['channels']
+        self._build()
+
+    def _build(self):
+        self.G = build_generator(self.latent_dim, self.image_size, self.channels)
+        self.D = build_discriminator(self.image_size, self.channels)
+
+        # compile discriminator
+        self.D.compile(optimizer=tf.keras.optimizers.Adam(self.cfg['learning_rate'], beta_1=self.cfg['beta1']),
+                       loss='binary_crossentropy', metrics=['accuracy'])
+
+        # combined model
+        self.D.trainable = False
+        z = tf.keras.Input(shape=(self.latent_dim,))
+        img = self.G(z)
+        valid = self.D(img)
+        self.combined = tf.keras.Model(z, valid)
+        self.combined.compile(optimizer=tf.keras.optimizers.Adam(self.cfg['learning_rate'], beta_1=self.cfg['beta1']),
+                              loss='binary_crossentropy')
+
+    def save(self, save_dir='./checkpoints'):
+        self.G.save(f'{save_dir}/G_final.keras')
+        self.D.save(f'{save_dir}/D_final.keras')
+
+
+if __name__ == '__main__':
+    gan = VanillaGAN()
+    gan.G.summary()
+    gan.D.summary()
+________________________________________
+train.py
+import os
+import numpy as np
+import tensorflow as tf
+from tqdm import tqdm
+import yaml
+from vanilla_gan import VanillaGAN
+from data_loader import prepare_dataset, load_config
+from utils.visualizer import save_image_grid
+
+
+def train():
+    cfg = load_config()
+    ds = prepare_dataset(cfg['dataset_path'], 'config.yaml')
+    gan = VanillaGAN(cfg)
+
+    latent_dim = cfg['latent_dim']
+    epochs = cfg['epochs']
+    sample_interval = cfg['sample_interval']
+    save_dir = cfg['save_dir']
+    os.makedirs(save_dir, exist_ok=True)
+    os.makedirs(cfg['samples_dir'], exist_ok=True)
+
+    real_label = np.ones((cfg['batch_size'], 1)) * 0.9  # label smoothing
+    fake_label = np.zeros((cfg['batch_size'], 1))
+
+    step = 0
+    for epoch in range(1, epochs + 1):
+        prog = tqdm(ds, desc=f'Epoch {epoch}/{epochs}', unit='batch')
+        for real_imgs in prog:
+            bs = real_imgs.shape[0]
+            # sample noise
+            z = np.random.normal(0, 1, (bs, latent_dim))
+            fake_imgs = gan.G.predict(z, verbose=0)
+
+            # train discriminator
+            d_loss_real = gan.D.train_on_batch(real_imgs, np.ones((bs,1))*0.9)
+            d_loss_fake = gan.D.train_on_batch(fake_imgs, np.zeros((bs,1)))
+            d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+
+            # train generator via combined model
+            z2 = np.random.normal(0, 1, (bs, latent_dim))
+            g_loss = gan.combined.train_on_batch(z2, np.ones((bs,1)))
+
+            if step % 50 == 0:
+                prog.set_postfix({'d_loss': float(d_loss[0]), 'g_loss': float(g_loss)})
+            step += 1
+
+        # save samples and checkpoint
+        if epoch % sample_interval == 0 or epoch == 1:
+            n_samples = 16
+            z = np.random.normal(size=(n_samples, latent_dim))
+            gen = gan.G.predict(z)
+            # denormalize
+            gen = (gen + 1.0) * 127.5
+            save_image_grid(gen.astype('uint8'), f"{cfg['samples_dir']}/epoch_{epoch:03d}.png", rows=4)
+            gan.save(save_dir)
+
+    # final save
+    gan.save(save_dir)
+
+
+if __name__ == '__main__':
+    train()
+________________________________________
+utils/visualizer.py
+import numpy as np
+from PIL import Image
+import math
+
+
+def save_image_grid(images, path, rows=4):
+    # images: (N, H, W, C), values uint8
+    n = images.shape[0]
+    cols = math.ceil(n / rows)
+    h, w = images.shape[1], images.shape[2]
+    c = images.shape[3]
+    grid = Image.new('RGB', (cols * w, rows * h))
+    for idx in range(n):
+        img = images[idx]
+        if c == 1:
+            pil = Image.fromarray(img.squeeze(), mode='L')
+            pil = pil.convert('RGB')
+        else:
+            pil = Image.fromarray(img)
+        r = idx // cols
+        col = idx % cols
+        grid.paste(pil, (col * w, r * h))
+    grid.save(path)
+
+
+if __name__ == '__main__':
+    print('visualizer ready')
+________________________________________
+utils/metrics.py
+import numpy as np
+from tensorflow.keras.applications import inception_v3
+from tensorflow.keras.applications.inception_v3 import preprocess_input
+from sklearn.metrics import pairwise_distances
+
+
+def get_inception_features(images, batch_size=32):
+    # images in [-1,1], resize to 299x299 expected by InceptionV3
+    imgs = (images + 1.0) * 127.5
+    imgs = imgs.astype('float32')
+    imgs = tf.image.resize(imgs, (299,299))
+    imgs = preprocess_input(imgs)
+    model = inception_v3.InceptionV3(include_top=False, pooling='avg', input_shape=(299,299,3))
+    feats = model.predict(imgs, batch_size=batch_size)
+    return feats
+
+
+def fid_score(real_feats, fake_feats):
+    # approximate FID
+    mu_r, sigma_r = np.mean(real_feats, axis=0), np.cov(real_feats, rowvar=False)
+    mu_f, sigma_f = np.mean(fake_feats, axis=0), np.cov(fake_feats, rowvar=False)
+    # compute sqrt of product
+    from scipy.linalg import sqrtm
+    covmean = sqrtm(sigma_r.dot(sigma_f))
+    if np.iscomplexobj(covmean):
+        covmean = covmean.real
+    fid = np.sum((mu_r - mu_f)**2) + np.trace(sigma_r + sigma_f - 2*covmean)
+    return float(fid)
+________________________________________
+evaluation.py
+import numpy as np
+import os
+import tensorflow as tf
+from data_loader import prepare_dataset, load_config
+from vanilla_gan import VanillaGAN
+from utils.metrics import get_inception_features, fid_score
+
+
+def sample_generated(gan, n=100, latent_dim=100):
+    z = np.random.normal(size=(n, latent_dim))
+    gen = gan.G.predict(z)
+    return gen
+
+
+def evaluate():
+    cfg = load_config()
+    gan = VanillaGAN(cfg)
+    # load weights if exist
+    try:
+        gan.G = tf.keras.models.load_model(f"{cfg['save_dir']}/G_final.keras")
+    except Exception as e:
+        print('Could not load G_final.keras', e)
+
+    # collect real features
+    ds = prepare_dataset(cfg['dataset_path'], 'config.yaml')
+    real_samples = []
+    for i, batch in enumerate(ds.take(10)):
+        real_samples.append(batch.numpy())
+    real_samples = np.concatenate(real_samples, axis=0)
+    if real_samples.shape[-1] != 3:
+        # replicate channel
+        real_samples = np.repeat(real_samples, 3, axis=-1)
+
+    real_feats = get_inception_features(real_samples[:200])
+
+    fake = sample_generated(gan, n=200, latent_dim=cfg['latent_dim'])
+    if fake.shape[-1] != 3:
+        fake = np.repeat(fake, 3, axis=-1)
+    fake_feats = get_inception_features(fake)
+
+    fid = fid_score(real_feats, fake_feats)
+    print('FID (proxy):', fid)
+
+if __name__ == '__main__':
+    evaluate()
+________________________________________
+inference.py
+import numpy as np
+import tensorflow as tf
+import yaml
+from vanilla_gan import VanillaGAN
+from PIL import Image
+
+
+def load_config(path='config.yaml'):
+    with open(path, 'r') as f:
+        return yaml.safe_load(f)
+
+
+def denormalize(img):
+    # from [-1,1] to [0,255]
+    img = (img + 1.0) * 127.5
+    img = np.clip(img, 0, 255).astype('uint8')
+    return img
+
+
+def generate(n=16, seed=None, out_dir='./samples'):
+    cfg = load_config()
+    gan = VanillaGAN(cfg)
+    try:
+        gan.G = tf.keras.models.load_model(f"{cfg['save_dir']}/G_final.keras")
+    except Exception as e:
+        print('Failed to load model:', e)
+
+    z = np.random.RandomState(seed).normal(size=(n, cfg['latent_dim'])) if seed else np.random.normal(size=(n, cfg['latent_dim']))
+    gen = gan.G.predict(z)
+    gen = denormalize(gen)
+    os.makedirs(out_dir, exist_ok=True)
+    paths = []
+    for i, img in enumerate(gen):
+        im = Image.fromarray(img)
+        p = f"{out_dir}/sample_{i:03d}.png"
+        im.save(p)
+        paths.append(p)
+    return paths
+
+
+if __name__ == '__main__':
+    print(generate(8))
+________________________________________
+app.py — Streamlit UI
+import streamlit as st
+import yaml
+import base64
+from inference import generate, load_config
+from PIL import Image
+
+st.set_page_config(page_title='Synthetic Image Generator', layout='wide')
+
+cfg = load_config()
+
+st.title('Synthetic Image Generator — Vanilla GAN (Keras)')
+
+cols = st.columns([1,2])
+with cols[0]:
+    n = st.slider('Number of images', min_value=1, max_value=64, value=16)
+    seed = st.number_input('Seed (0 for random)', min_value=0, value=0)
+    size = st.selectbox('Image Size', options=[32,64,128], index=1)
+    if st.button('Generate'):
+        seed_val = None if seed == 0 else int(seed)
+        with st.spinner('Generating...'):
+            paths = generate(n=n, seed=seed_val, out_dir='./streamlit_out')
+        st.success('Generated')
+        imgs = [Image.open(p) for p in paths]
+        cols2 = st.columns(4)
+        for i, im in enumerate(imgs):
+            cols2[i%4].image(im, use_column_width=True)
+        # zip download
+        import zipfile, io
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w') as zf:
+            for p in paths:
+                zf.write(p)
+        buf.seek(0)
+        b64 = base64.b64encode(buf.read()).decode()
+        href = f"data:application/zip;base64,{b64}"
+        st.markdown(f"[Download images](%s)" % href)
+
+with cols[1]:
+    st.markdown('''
+    **Instructions**
+    - Put your dataset (images) under the `data/` folder and set `dataset_path` in `config.yaml`.
+    - Run training: `python train.py`
+    - Start Streamlit: `streamlit run app.py`
+    ''')
+________________________________________
+Dockerfile
+FROM python:3.10-slim
+WORKDIR /app
+COPY . /app
+RUN pip install --upgrade pip && pip install -r requirements.txt
+EXPOSE 8501
+CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+________________________________________
+Quick commands
+# 1. Create virtual env and install
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# 2. Prepare dataset: put images under ./data/celeba_preprocessed
+# 3. Train
+python train.py
+
+# 4. Evaluate
+python evaluation.py
+
+# 5. Run Streamlit UI
+streamlit run app.py
+________________________________________
+Notes & recommendations
+•	The above code is a functional, clean starting point for a Vanilla GAN in tf.keras targeting 64×64 images.
+•	For medical data (DICOM), add a DICOM loader in data_loader.py (pydicom) and ensure PHI is removed.
+•	For better quality, consider moving to DCGAN (conv layers in generator with batchnorm), WGAN-GP, and using spectral normalization.
+•	Keep dataset size large — GANs benefit from thousands of images.
+________________________________________
+If you want, I can now: - Convert the streamlit app to a FastAPI + React frontend. - Add DVC commands and a simple dvc.yaml pipeline. - Provide a ready-to-run Colab notebook with preprocessed sample dataset (CelebA subset).
+Tell me which extension you’d like next and I’ll add it to the canvas.

@@ -20,10 +20,26 @@ def _append_training_history(csv_path, epoch, d_loss, g_loss):
         writer.writerow([int(epoch), float(d_loss), float(g_loss)])
 
 
+def get_strategy(cfg):
+    use_multi_gpu = bool(cfg.get('use_multi_gpu', True))
+    gpus = tf.config.list_physical_devices('GPU')
+    if use_multi_gpu and len(gpus) >= 2:
+        print(f"Multi-GPU training enabled: {len(gpus)} GPUs detected")
+        return tf.distribute.MirroredStrategy()
+    return tf.distribute.get_strategy()
+
+
 def train():
     cfg = load_config()
+    strategy = get_strategy(cfg)
+    
     ds = prepare_dataset(cfg['dataset_path'], 'config.yaml')
-    gan = VanillaGAN(cfg)
+    
+    # If using multi-GPU, distribute the dataset
+    # if isinstance(strategy, tf.distribute.MirroredStrategy):
+    #     ds = strategy.experimental_distribute_dataset(ds)
+
+    gan = VanillaGAN(cfg, strategy=strategy)
 
     latent_dim = cfg['latent_dim']
     epochs = cfg['epochs']

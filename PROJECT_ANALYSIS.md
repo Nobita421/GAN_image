@@ -75,7 +75,12 @@ All settings are centralized in **[config.yaml](config.yaml)**, allowing for eas
 - Uses the **Fréchet Inception Distance (FID)** to compare the distribution of generated images against real ones.
 - Supports **Multi-GPU** acceleration via `MirroredStrategy`.
 
-### 5.4 Deployment ([app.py](app.py))
+### 5.4 Multi-GPU Training Support
+- The project is optimized for multi-GPU environments (like Kaggle's dual T4 setup).
+- **Strategy**: Uses `tf.distribute.MirroredStrategy` to parallelize model operations.
+- **Implementation**: The `VanillaGAN` class and training loop are wrapped in the strategy scope, ensuring that both the Generator and Discriminator are distributed across available GPUs.
+
+### 5.5 Deployment ([app.py](app.py))
 - A **Streamlit** dashboard allows non-technical users to generate images, adjust seeds, and download results as a ZIP file.
 
 ---

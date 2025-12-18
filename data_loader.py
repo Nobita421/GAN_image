@@ -32,6 +32,7 @@ def prepare_dataset(dataset_path, config_path='config.yaml'):
 
     dataset_source = cfg.get('dataset_source', 'folder')
     if dataset_source == 'tfds_cifar10':
+        # ... (existing tfds code)
         try:
             import tensorflow_datasets as tfds
         except Exception as e:
@@ -57,30 +58,26 @@ def prepare_dataset(dataset_path, config_path='config.yaml'):
         return ds
 
     dataset_path = dataset_path or cfg.get('dataset_path')
-    files = []
-    for root, _, filenames in os.walk(dataset_path):
-        for fn in filenames:
-            if fn.lower().endswith(('.jpg', '.jpeg', '.png')):
-                files.append(os.path.join(root, fn))
-    files = sorted(files)
+    
+    # Optimized folder loading using tf.data pipeline
+    def load_and_preprocess(path):
+        img = tf.io.read_file(path)
+        img = tf.image.decode_image(img, channels=channels, expand_animations=False)
+        img = tf.image.resize(img, (size, size))
+        img = (tf.cast(img, tf.float32) / 127.5) - 1.0
+        return img
 
+    file_pattern = os.path.join(dataset_path, "*.*")
+    ds = tf.data.Dataset.list_files(file_pattern, shuffle=True)
+    
     train_split = float(cfg.get('train_split', 1.0))
-    if 0 < train_split < 1.0 and len(files) > 0:
-        n_train = max(1, int(len(files) * train_split))
-        files = files[:n_train]
+    if 0 < train_split < 1.0:
+        num_files = tf.data.experimental.cardinality(ds).numpy()
+        if num_files > 0:
+            ds = ds.take(int(num_files * train_split))
 
-    def gen():
-        for p in files:
-            try:
-                yield preprocess_image(p, image_size=size, channels=channels)
-            except Exception as e:
-                print('skip', p, e)
-
-    ds = tf.data.Dataset.from_generator(
-        gen,
-        output_signature=tf.TensorSpec(shape=(size, size, channels), dtype=tf.float32)
-    )
-    ds = ds.shuffle(buffer_size=1000).batch(bs).prefetch(tf.data.AUTOTUNE)
+    ds = ds.map(load_and_preprocess, num_parallel_calls=tf.data.AUTOTUNE)
+    ds = ds.batch(bs, drop_remainder=True).prefetch(tf.data.AUTOTUNE)
     return ds
 
 

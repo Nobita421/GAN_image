@@ -78,6 +78,9 @@ All settings are centralized in **[config.yaml](config.yaml)**, allowing for eas
 ### 5.4 Multi-GPU Training Support
 - The project is optimized for multi-GPU environments (like Kaggle's dual T4 setup).
 - **Strategy**: Uses `tf.distribute.MirroredStrategy` to parallelize model operations.
+- **Performance Optimizations**:
+    - **Parallel Data Loading**: Uses `tf.data` with `AUTOTUNE` and `prefetch` to prevent CPU bottlenecks.
+    - **Optimized Batch Size**: Configured to 128 to ensure high GPU utilization across multiple devices.
 - **Implementation**: The `VanillaGAN` class and training loop are wrapped in the strategy scope, ensuring that both the Generator and Discriminator are distributed across available GPUs.
 
 ### 5.5 Deployment ([app.py](app.py))

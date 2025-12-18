@@ -32,6 +32,10 @@ def train():
     os.makedirs(save_dir, exist_ok=True)
     os.makedirs(cfg['samples_dir'], exist_ok=True)
 
+    # TensorBoard setup
+    log_dir = os.path.join(save_dir, 'logs')
+    summary_writer = tf.summary.create_file_writer(log_dir)
+
     real_label = np.ones((cfg['batch_size'], 1)) * 0.9  # label smoothing
     fake_label = np.zeros((cfg['batch_size'], 1))
 
@@ -64,6 +68,11 @@ def train():
 
             if step % 50 == 0:
                 prog.set_postfix({'d_loss': float(d_loss[0]), 'g_loss': float(g_loss)})
+                
+                # TensorBoard logging
+                with summary_writer.as_default():
+                    tf.summary.scalar('d_loss', float(d_loss[0]), step=step)
+                    tf.summary.scalar('g_loss', float(g_loss), step=step)
             step += 1
 
         # save samples and checkpoint

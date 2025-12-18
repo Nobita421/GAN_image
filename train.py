@@ -35,10 +35,6 @@ def train():
     
     ds = prepare_dataset(cfg['dataset_path'], 'config.yaml')
     
-    # If using multi-GPU, distribute the dataset
-    # if isinstance(strategy, tf.distribute.MirroredStrategy):
-    #     ds = strategy.experimental_distribute_dataset(ds)
-
     gan = VanillaGAN(cfg, strategy=strategy)
 
     latent_dim = cfg['latent_dim']

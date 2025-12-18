@@ -44,6 +44,7 @@ class VanillaGAN:
                 beta_1=self.cfg['beta1'],
                 clipnorm=1.0  # Gradient clipping for stability
             ),
+                                  loss='binary_crossentropy')
 
     def save(self, save_dir='./checkpoints'):
         self.G.save(f'{save_dir}/G_final.keras')

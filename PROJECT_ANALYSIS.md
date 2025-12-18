@@ -65,6 +65,7 @@ All settings are centralized in **[config.yaml](config.yaml)**, allowing for eas
 ### 5.2 Training ([train.py](train.py))
 - The training loop implements **Label Smoothing** (0.9 for real images) to prevent the discriminator from overpowering the generator early on.
 - **Gradient Clipping**: Both the Generator and Discriminator optimizers use `clipnorm=1.0` to prevent exploding gradients and mitigate mode collapse.
+- **Resume Capability**: The script automatically checks for existing checkpoints in the `checkpoints/` directory. If found, it loads the weights and resumes training from the last recorded epoch in `training_history.csv`.
 - **Monitoring**: 
     - Saves visual samples to the `samples/` directory every few epochs.
     - **CSV Logging**: Logs per-epoch average losses to `checkpoints/training_history.csv` (tracked in Git).

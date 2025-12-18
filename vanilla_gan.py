@@ -1,3 +1,4 @@
+import os
 import tensorflow as tf
 import yaml
 from generator import build_generator
@@ -49,6 +50,28 @@ class VanillaGAN:
     def save(self, save_dir='./checkpoints'):
         self.G.save(f'{save_dir}/G_final.keras')
         self.D.save(f'{save_dir}/D_final.keras')
+
+    def load(self, save_dir='./checkpoints'):
+        g_path = f'{save_dir}/G_final.keras'
+        d_path = f'{save_dir}/D_final.keras'
+        if os.path.exists(g_path) and os.path.exists(d_path):
+            print(f"Loading existing checkpoints from {save_dir}...")
+            with self.strategy.scope():
+                self.G = tf.keras.models.load_model(g_path)
+                self.D = tf.keras.models.load_model(d_path)
+                # Re-build combined model after loading
+                self.D.trainable = False
+                z = tf.keras.Input(shape=(self.latent_dim,))
+                img = self.G(z)
+                valid = self.D(img)
+                self.combined = tf.keras.Model(z, valid)
+                self.combined.compile(optimizer=tf.keras.optimizers.Adam(
+                    self.cfg['learning_rate'], 
+                    beta_1=self.cfg['beta1'],
+                    clipnorm=1.0
+                ), loss='binary_crossentropy')
+            return True
+        return False
 
 
 if __name__ == '__main__':

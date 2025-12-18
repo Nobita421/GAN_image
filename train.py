@@ -20,6 +20,20 @@ def _append_training_history(csv_path, epoch, d_loss, g_loss):
         writer.writerow([int(epoch), float(d_loss), float(g_loss)])
 
 
+def _get_last_epoch(csv_path):
+    if not os.path.exists(csv_path):
+        return 0
+    try:
+        import csv
+        with open(csv_path, 'r') as f:
+            reader = csv.DictReader(f)
+            epochs = [int(row['epoch']) for row in reader]
+            return max(epochs) if epochs else 0
+    except Exception:
+        pass
+    return 0
+
+
 def get_strategy(cfg):
     use_multi_gpu = bool(cfg.get('use_multi_gpu', True))
     gpus = tf.config.list_physical_devices('GPU')
@@ -37,6 +51,15 @@ def train():
     
     gan = VanillaGAN(cfg, strategy=strategy)
 
+    # Resume training if checkpoint exists
+    save_dir = cfg['save_dir']
+    start_epoch = 0
+    if gan.load(save_dir):
+        start_epoch = _get_last_epoch(os.path.join(save_dir, 'training_history.csv'))
+        print(f"Resuming training from epoch {start_epoch}.")
+    else:
+        print("Starting training from scratch.")
+
     latent_dim = cfg['latent_dim']
     epochs = cfg['epochs']
     sample_interval = cfg['sample_interval']
@@ -51,8 +74,8 @@ def train():
     real_label = np.ones((cfg['batch_size'], 1)) * 0.9  # label smoothing
     fake_label = np.zeros((cfg['batch_size'], 1))
 
-    step = 0
-    for epoch in range(1, epochs + 1):
+    step = 0 # TensorBoard step
+    for epoch in range(start_epoch + 1, epochs + 1):
         d_losses = []
         g_losses = []
         prog = tqdm(ds, desc=f'Epoch {epoch}/{epochs}', unit='batch')

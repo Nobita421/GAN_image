@@ -24,7 +24,11 @@ class VanillaGAN:
         self.D = build_discriminator(self.image_size, self.channels)
 
         # compile discriminator
-        self.D.compile(optimizer=tf.keras.optimizers.Adam(self.cfg['learning_rate'], beta_1=self.cfg['beta1']),
+        self.D.compile(optimizer=tf.keras.optimizers.Adam(
+            self.cfg['learning_rate'], 
+            beta_1=self.cfg['beta1'],
+            clipnorm=1.0  # Gradient clipping for stability
+        ),
                        loss='binary_crossentropy', metrics=['accuracy'])
 
         # combined model
@@ -33,7 +37,11 @@ class VanillaGAN:
         img = self.G(z)
         valid = self.D(img)
         self.combined = tf.keras.Model(z, valid)
-        self.combined.compile(optimizer=tf.keras.optimizers.Adam(self.cfg['learning_rate'], beta_1=self.cfg['beta1']),
+        self.combined.compile(optimizer=tf.keras.optimizers.Adam(
+            self.cfg['learning_rate'], 
+            beta_1=self.cfg['beta1'],
+            clipnorm=1.0  # Gradient clipping for stability
+        ),
                               loss='binary_crossentropy')
 
     def save(self, save_dir='./checkpoints'):

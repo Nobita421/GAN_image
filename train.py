@@ -88,26 +88,32 @@ def train():
             # train discriminator
             d_loss_real = gan.D.train_on_batch(real_imgs, np.ones((bs,1))*0.9)
             d_loss_fake = gan.D.train_on_batch(fake_imgs, np.zeros((bs,1)))
-            d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+            
+            # Handle potential list return from train_on_batch
+            d_loss_val = d_loss_real[0] if isinstance(d_loss_real, list) else d_loss_real
+            d_loss_fake_val = d_loss_fake[0] if isinstance(d_loss_fake, list) else d_loss_fake
+            d_loss = 0.5 * (d_loss_val + d_loss_fake_val)
 
             # train generator via combined model
             z2 = np.random.normal(0, 1, (bs, latent_dim))
             g_loss = gan.combined.train_on_batch(z2, np.ones((bs,1)))
+            g_loss_val = g_loss[0] if isinstance(g_loss, list) else g_loss
+
+            # Check for NaN and skip if necessary
+            if np.isnan(d_loss) or np.isnan(g_loss_val):
+                continue
 
             # track losses (for evaluation plots)
-            try:
-                d_losses.append(float(d_loss[0]))
-            except Exception:
-                d_losses.append(float(d_loss))
-            g_losses.append(float(g_loss))
+            d_losses.append(float(d_loss))
+            g_losses.append(float(g_loss_val))
 
             if step % 50 == 0:
-                prog.set_postfix({'d_loss': float(d_loss[0]), 'g_loss': float(g_loss)})
+                prog.set_postfix({'d_loss': float(d_loss), 'g_loss': float(g_loss_val)})
                 
                 # TensorBoard logging
                 with summary_writer.as_default():
-                    tf.summary.scalar('d_loss', float(d_loss[0]), step=step)
-                    tf.summary.scalar('g_loss', float(g_loss), step=step)
+                    tf.summary.scalar('d_loss', float(d_loss), step=step)
+                    tf.summary.scalar('g_loss', float(g_loss_val), step=step)
             step += 1
 
         # save samples and checkpoint

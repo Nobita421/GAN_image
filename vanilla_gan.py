@@ -30,9 +30,10 @@ class VanillaGAN:
             self.D.compile(optimizer=tf.keras.optimizers.Adam(
                 self.cfg['learning_rate'], 
                 beta_1=self.cfg['beta1'],
-                clipnorm=1.0  # Gradient clipping for stability
+                clipnorm=1.0
             ),
-                           loss='binary_crossentropy', metrics=['accuracy'])
+                           loss=tf.keras.losses.BinaryCrossentropy(from_logits=True), 
+                           metrics=['accuracy'])
 
             # combined model
             self.D.trainable = False
@@ -43,9 +44,9 @@ class VanillaGAN:
             self.combined.compile(optimizer=tf.keras.optimizers.Adam(
                 self.cfg['learning_rate'], 
                 beta_1=self.cfg['beta1'],
-                clipnorm=1.0  # Gradient clipping for stability
+                clipnorm=1.0
             ),
-                                  loss='binary_crossentropy')
+                                  loss=tf.keras.losses.BinaryCrossentropy(from_logits=True))
 
     def save(self, save_dir='./checkpoints'):
         self.G.save(f'{save_dir}/G_final.keras')
@@ -69,7 +70,7 @@ class VanillaGAN:
                     self.cfg['learning_rate'], 
                     beta_1=self.cfg['beta1'],
                     clipnorm=1.0
-                ), loss='binary_crossentropy')
+                ), loss=tf.keras.losses.BinaryCrossentropy(from_logits=True))
             return True
         return False
 

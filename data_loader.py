@@ -61,14 +61,30 @@ def prepare_dataset(dataset_path, config_path='config.yaml'):
     
     # Optimized folder loading using tf.data pipeline
     def load_and_preprocess(path):
-        img = tf.io.read_file(path)
-        img = tf.image.decode_image(img, channels=channels, expand_animations=False)
-        img = tf.image.resize(img, (size, size))
-        img = (tf.cast(img, tf.float32) / 127.5) - 1.0
-        return img
+        try:
+            img = tf.io.read_file(path)
+            img = tf.image.decode_image(img, channels=channels, expand_animations=False)
+            img = tf.image.resize(img, (size, size))
+            img = (tf.cast(img, tf.float32) / 127.5) - 1.0
+            # Ensure shape is set for the batching
+            img = tf.ensure_shape(img, (size, size, channels))
+            return img
+        except Exception:
+            # Return a zero tensor if decoding fails (rare with decode_image)
+            return tf.zeros((size, size, channels))
 
-    file_pattern = os.path.join(dataset_path, "*.*")
-    ds = tf.data.Dataset.list_files(file_pattern, shuffle=True)
+    # Filter for common image extensions
+    import glob
+    valid_exts = ('.jpg', '.jpeg', '.png', '.bmp')
+    all_files = []
+    for ext in valid_exts:
+        all_files.extend(glob.glob(os.path.join(dataset_path, f"*{ext}")))
+        all_files.extend(glob.glob(os.path.join(dataset_path, f"*{ext.upper()}")))
+    
+    if not all_files:
+        raise RuntimeError(f"No images found in {dataset_path}")
+        
+    ds = tf.data.Dataset.from_tensor_slices(all_files).shuffle(len(all_files))
     
     train_split = float(cfg.get('train_split', 1.0))
     if 0 < train_split < 1.0:

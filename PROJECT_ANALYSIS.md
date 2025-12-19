@@ -63,8 +63,11 @@ All settings are centralized in **[config.yaml](config.yaml)**, allowing for eas
 2.  **Smoke Test**: Run `python smoke_test.py` or `run_smoke_test.bat` to verify the environment and file structure.
 
 ### 5.2 Training ([train.py](train.py))
-- The training loop implements **Label Smoothing** (0.9 for real images) to prevent the discriminator from overpowering the generator early on.
-- **Gradient Clipping**: Both the Generator and Discriminator optimizers use `clipnorm=1.0` to prevent exploding gradients and mitigate mode collapse.
+- **Stability Improvements**:
+    - **Logits-based Loss**: Switched to `from_logits=True` in `BinaryCrossentropy` and removed the final `sigmoid` from the Discriminator for better numerical stability.
+    - **Label Smoothing**: Uses 0.9 for real images to prevent the discriminator from becoming too confident.
+    - **Gradient Clipping**: Both optimizers use `clipnorm=1.0` to prevent exploding gradients.
+    - **NaN Protection**: The training loop automatically detects and skips batches that produce `NaN` losses to prevent model corruption.
 - **Resume Capability**: The script automatically checks for existing checkpoints in the `checkpoints/` directory. If found, it loads the weights and resumes training from the last recorded epoch in `training_history.csv`.
 - **Monitoring**: 
     - Saves visual samples to the `samples/` directory every few epochs.

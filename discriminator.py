@@ -22,7 +22,7 @@ def build_discriminator(image_size=64, channels=3):
     x = layers.LeakyReLU(0.2)(x)
 
     x = layers.Flatten()(x)
-    x = layers.Dense(1, activation='sigmoid')(x)
+    x = layers.Dense(1)(x) # Remove sigmoid for numerical stability (use from_logits=True)
 
     model = tf.keras.Model(inputs=inp, outputs=x)
     return model
